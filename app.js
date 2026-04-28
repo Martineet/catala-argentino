@@ -1,55 +1,121 @@
 // ===========================
-// DATA & STATE
+// SUPABASE CONFIG
 // ===========================
-const STORAGE_KEY = 'catala_workbook_cards';
+const SUPABASE_URL = 'https://nsudwdzkyhkvssylmefe.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_fiQaSo72oxx9ylCnufJJAg_JdozGy22';
 
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===========================
+// STATE
+// ===========================
 const DIFF_LABELS = {
-  1: { label: '1 · Fàcil', dot: '🟢' },
+  1: { label: '1 · Fàcil',  dot: '🟢' },
   2: { label: '2 · Normal', dot: '🟡' },
-  3: { label: '3 · Difícil', dot: '🟠' },
+  3: { label: '3 · Difícil',dot: '🟠' },
   4: { label: '4 · Extrem', dot: '🔴' },
 };
 
-let cards = [];
-let sortCol = null;
-let sortDir = 1; // 1 = asc, -1 = desc
+let cards      = [];
+let sortCol    = null;
+let sortDir    = 1;
 let selectedDiff = null;
-let examScore = 0;
+let examScore  = 0;
 let currentExamCard = null;
 let searchQuery = '';
 
 // ===========================
-// PERSISTENCE
+// SYNC STATUS UI
 // ===========================
-function loadCards() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    cards = raw ? JSON.parse(raw) : getDefaultCards();
-  } catch {
-    cards = getDefaultCards();
+function setStatus(state) {
+  const el = document.getElementById('syncStatus');
+  const map = {
+    connecting: '⏳ Connectant...',
+    ok:         '🟢 Connectat',
+    saving:     '💾 Guardant...',
+    error:      '🔴 Error de connexió',
+  };
+  el.textContent = map[state] || '';
+  el.className = 'sync-status sync-' + state;
+}
+
+// ===========================
+// LOAD CARDS FROM SUPABASE
+// ===========================
+async function loadCards() {
+  setStatus('connecting');
+  showLoading(true);
+
+  const { data, error } = await db
+    .from('cartes')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error carregant cartes:', error);
+    setStatus('error');
+    showLoading(false);
+    return;
   }
-  saveCards();
+
+  cards = data;
+  setStatus('ok');
+  showLoading(false);
+  render();
 }
 
-function saveCards() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+function showLoading(show) {
+  document.getElementById('loadingState').style.display = show ? 'block' : 'none';
+  document.getElementById('wordsTable').style.display  = show ? 'none'  : '';
 }
 
-function getDefaultCards() {
-  return [
-    { id: uid(), catala: 'gràcies', argenti: 'gracias', dificultat: 1 },
-    { id: uid(), catala: 'bon dia', argenti: 'buen día', dificultat: 1 },
-    { id: uid(), catala: 'adéu', argenti: 'chau', dificultat: 1 },
-    { id: uid(), catala: 'maco/maca', argenti: 'lindo/linda', dificultat: 2 },
-    { id: uid(), catala: 'ara', argenti: 'ahora', dificultat: 1 },
-    { id: uid(), catala: 'sempre', argenti: 'siempre', dificultat: 2 },
-    { id: uid(), catala: 'treballar', argenti: 'trabajar', dificultat: 3 },
-    { id: uid(), catala: 'enyorança', argenti: 'nostalgia profunda', dificultat: 4 },
-  ];
+// ===========================
+// REAL-TIME SUBSCRIPTION
+// ===========================
+function subscribeRealtime() {
+  db.channel('cartes-changes')
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'cartes' },
+      (payload) => {
+        // Avoid duplicates (from our own insert)
+        if (!cards.find(c => c.id === payload.new.id)) {
+          cards.push(payload.new);
+          render();
+        }
+      }
+    )
+    .on('postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'cartes' },
+      (payload) => {
+        cards = cards.filter(c => c.id !== payload.old.id);
+        render();
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') setStatus('ok');
+    });
 }
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// ===========================
+// SAVE CARD TO SUPABASE
+// ===========================
+async function saveCardToDb(catala, argenti, dificultat) {
+  setStatus('saving');
+  const { data, error } = await db
+    .from('cartes')
+    .insert([{ catala, argenti, dificultat }])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error guardant carta:', error);
+    setStatus('error');
+    return null;
+  }
+
+  setStatus('ok');
+  return data;
 }
 
 // ===========================
@@ -58,7 +124,6 @@ function uid() {
 function getFilteredSortedCards() {
   let result = [...cards];
 
-  // Filter by search
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     result = result.filter(
@@ -66,7 +131,6 @@ function getFilteredSortedCards() {
     );
   }
 
-  // Sort
   if (sortCol) {
     result.sort((a, b) => {
       let av = a[sortCol];
@@ -74,7 +138,7 @@ function getFilteredSortedCards() {
       if (typeof av === 'string') av = av.toLowerCase();
       if (typeof bv === 'string') bv = bv.toLowerCase();
       if (av < bv) return -1 * sortDir;
-      if (av > bv) return 1 * sortDir;
+      if (av > bv) return  1 * sortDir;
       return 0;
     });
   }
@@ -98,30 +162,22 @@ function renderTable() {
   data.forEach(card => {
     const tr = document.createElement('tr');
     tr.dataset.id = card.id;
-
     const diff = DIFF_LABELS[card.dificultat];
-
     tr.innerHTML = `
       <td class="td-catala">${escHtml(card.catala)}</td>
       <td class="td-argenti">${escHtml(card.argenti)}</td>
       <td><span class="diff-badge diff-${card.dificultat}">${diff.dot} ${diff.label}</span></td>
-      <td><button class="btn-delete" data-id="${card.id}" title="Eliminar">🗑</button></td>
+      <td></td>
     `;
-
     tbody.appendChild(tr);
-  });
-
-  // Delete buttons
-  tbody.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => deleteCard(btn.dataset.id));
   });
 }
 
 function renderStats() {
-  document.getElementById('totalCards').textContent = cards.length;
-  document.getElementById('easyCards').textContent = cards.filter(c => c.dificultat === 1).length;
-  document.getElementById('medCards').textContent = cards.filter(c => c.dificultat === 2).length;
-  document.getElementById('hardCards').textContent = cards.filter(c => c.dificultat === 3).length;
+  document.getElementById('totalCards').textContent  = cards.length;
+  document.getElementById('easyCards').textContent   = cards.filter(c => c.dificultat === 1).length;
+  document.getElementById('medCards').textContent    = cards.filter(c => c.dificultat === 2).length;
+  document.getElementById('hardCards').textContent   = cards.filter(c => c.dificultat === 3).length;
   document.getElementById('extremCards').textContent = cards.filter(c => c.dificultat === 4).length;
 }
 
@@ -136,21 +192,14 @@ function render() {
 document.querySelectorAll('th.sortable').forEach(th => {
   th.addEventListener('click', () => {
     const col = th.dataset.col;
-    if (sortCol === col) {
-      sortDir *= -1;
-    } else {
-      sortCol = col;
-      sortDir = 1;
-    }
+    if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = 1; }
 
-    // Update icons
     document.querySelectorAll('th.sortable').forEach(t => {
       t.classList.remove('active');
       t.querySelector('.sort-icon').textContent = '↕';
     });
     th.classList.add('active');
     th.querySelector('.sort-icon').textContent = sortDir === 1 ? '↑' : '↓';
-
     renderTable();
   });
 });
@@ -166,14 +215,12 @@ document.getElementById('searchInput').addEventListener('input', e => {
 // ===========================
 // ADD CARD MODAL
 // ===========================
-const addModal = document.getElementById('addModal');
-const openAddBtn = document.getElementById('openAddBtn');
-const closeAddBtn = document.getElementById('closeAddBtn');
+const addModal   = document.getElementById('addModal');
+const formError  = document.getElementById('formError');
 const saveCardBtn = document.getElementById('saveCardBtn');
-const formError = document.getElementById('formError');
 
-openAddBtn.addEventListener('click', openAddModal);
-closeAddBtn.addEventListener('click', closeAddModal);
+document.getElementById('openAddBtn').addEventListener('click', openAddModal);
+document.getElementById('closeAddBtn').addEventListener('click', closeAddModal);
 addModal.addEventListener('click', e => { if (e.target === addModal) closeAddModal(); });
 
 function openAddModal() {
@@ -190,7 +237,6 @@ function closeAddModal() {
   addModal.classList.remove('open');
 }
 
-// Difficulty selector
 document.getElementById('difficultySelector').addEventListener('click', e => {
   const btn = e.target.closest('.diff-btn');
   if (!btn) return;
@@ -199,20 +245,34 @@ document.getElementById('difficultySelector').addEventListener('click', e => {
   btn.classList.add('selected');
 });
 
-saveCardBtn.addEventListener('click', () => {
-  const catala = document.getElementById('inputCatala').value.trim();
+saveCardBtn.addEventListener('click', async () => {
+  const catala  = document.getElementById('inputCatala').value.trim();
   const argenti = document.getElementById('inputArgenti').value.trim();
 
-  if (!catala) { formError.textContent = '⚠️ Escriu la paraula en català.'; return; }
-  if (!argenti) { formError.textContent = '⚠️ Escriu la paraula en argentí.'; return; }
+  if (!catala)       { formError.textContent = '⚠️ Escriu la paraula en català.'; return; }
+  if (!argenti)      { formError.textContent = '⚠️ Escriu la paraula en argentí.'; return; }
   if (!selectedDiff) { formError.textContent = '⚠️ Selecciona una dificultat.'; return; }
 
   formError.textContent = '';
+  saveCardBtn.disabled = true;
+  saveCardBtn.textContent = 'Guardant...';
 
-  const newCard = { id: uid(), catala, argenti, dificultat: selectedDiff };
-  cards.push(newCard);
-  saveCards();
-  render();
+  const newCard = await saveCardToDb(catala, argenti, selectedDiff);
+
+  saveCardBtn.disabled = false;
+  saveCardBtn.textContent = 'Guardar carta 💾';
+
+  if (!newCard) {
+    formError.textContent = '❌ Error guardant. Torna-ho a provar.';
+    return;
+  }
+
+  // Add locally immediately (real-time will also fire but we deduplicate)
+  if (!cards.find(c => c.id === newCard.id)) {
+    cards.push(newCard);
+    render();
+  }
+
   closeAddModal();
 
   // Flash new row
@@ -220,12 +280,11 @@ saveCardBtn.addEventListener('click', () => {
     const newRow = document.querySelector(`tr[data-id="${newCard.id}"]`);
     if (newRow) {
       newRow.style.background = 'var(--accent-light)';
-      setTimeout(() => { newRow.style.background = ''; }, 800);
+      setTimeout(() => { newRow.style.background = ''; }, 900);
     }
   }, 50);
 });
 
-// Enter key in inputs
 document.getElementById('inputCatala').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('inputArgenti').focus();
 });
@@ -234,29 +293,17 @@ document.getElementById('inputArgenti').addEventListener('keydown', e => {
 });
 
 // ===========================
-// DELETE CARD
-// ===========================
-function deleteCard(id) {
-  if (!confirm('Eliminar aquesta carta?')) return;
-  cards = cards.filter(c => c.id !== id);
-  saveCards();
-  render();
-}
-
-// ===========================
 // EXAM MODAL
 // ===========================
-const examModal = document.getElementById('examModal');
-const openExamBtn = document.getElementById('openExamBtn');
-const closeExamBtn = document.getElementById('closeExamBtn');
-const revealBtn = document.getElementById('revealBtn');
-const correctBtn = document.getElementById('correctBtn');
-const wrongBtn = document.getElementById('wrongBtn');
+const examModal   = document.getElementById('examModal');
+const revealBtn   = document.getElementById('revealBtn');
+const correctBtn  = document.getElementById('correctBtn');
+const wrongBtn    = document.getElementById('wrongBtn');
 const answerReveal = document.getElementById('answerReveal');
-const examEmpty = document.getElementById('examEmpty');
+const examEmpty   = document.getElementById('examEmpty');
 
-openExamBtn.addEventListener('click', openExamModal);
-closeExamBtn.addEventListener('click', closeExamModal);
+document.getElementById('openExamBtn').addEventListener('click', openExamModal);
+document.getElementById('closeExamBtn').addEventListener('click', closeExamModal);
 examModal.addEventListener('click', e => { if (e.target === examModal) closeExamModal(); });
 
 function openExamModal() {
@@ -284,21 +331,16 @@ function loadNextExamCard() {
   examEmpty.style.display = 'none';
   document.getElementById('examCard').style.display = 'block';
 
-  // Pick random card
   currentExamCard = cards[Math.floor(Math.random() * cards.length)];
 
-  // Pick random direction (show catala or argenti)
   const showCatala = Math.random() < 0.5;
-  const shownLang = showCatala ? 'Català 🇪🇸' : 'Argentí 🇦🇷';
-  const shownWord = showCatala ? currentExamCard.catala : currentExamCard.argenti;
-  const hiddenWord = showCatala ? currentExamCard.argenti : currentExamCard.catala;
-
-  document.getElementById('examLang').textContent = shownLang;
-  document.getElementById('examWord').textContent = shownWord;
-  document.getElementById('revealWord').textContent = hiddenWord;
+  document.getElementById('examLang').textContent = showCatala ? 'Català 🇪🇸' : 'Argentí 🇦🇷';
+  document.getElementById('examWord').textContent  = showCatala ? currentExamCard.catala  : currentExamCard.argenti;
+  document.getElementById('revealWord').textContent = showCatala ? currentExamCard.argenti : currentExamCard.catala;
 
   const diff = DIFF_LABELS[currentExamCard.dificultat];
-  document.getElementById('examDiff').innerHTML = `<span class="diff-badge diff-${currentExamCard.dificultat}">${diff.dot} ${diff.label}</span>`;
+  document.getElementById('examDiff').innerHTML =
+    `<span class="diff-badge diff-${currentExamCard.dificultat}">${diff.dot} ${diff.label}</span>`;
 }
 
 revealBtn.addEventListener('click', () => {
@@ -306,38 +348,25 @@ revealBtn.addEventListener('click', () => {
   answerReveal.style.display = 'block';
 });
 
-correctBtn.addEventListener('click', () => {
-  examScore += 1;
-  updateExamScore(true);
-  loadNextExamCard();
-});
-
-wrongBtn.addEventListener('click', () => {
-  examScore -= 1;
-  updateExamScore(false);
-  loadNextExamCard();
-});
+correctBtn.addEventListener('click', () => { examScore += 1; updateExamScore(true);  loadNextExamCard(); });
+wrongBtn.addEventListener('click',   () => { examScore -= 1; updateExamScore(false); loadNextExamCard(); });
 
 function updateExamScore(correct) {
   const scoreEl = document.getElementById('examScore');
   scoreEl.textContent = examScore;
 
-  if (correct === true) {
-    scoreEl.style.color = 'var(--green)';
-  } else if (correct === false) {
-    scoreEl.style.color = 'var(--red)';
-  } else {
-    scoreEl.style.color = 'var(--accent)';
-  }
+  if      (correct === true)  scoreEl.style.color = 'var(--green)';
+  else if (correct === false) scoreEl.style.color = 'var(--red)';
+  else                        scoreEl.style.color = 'var(--accent)';
 
   scoreEl.classList.remove('score-pop');
-  void scoreEl.offsetWidth; // reflow
+  void scoreEl.offsetWidth;
   scoreEl.classList.add('score-pop');
 
   setTimeout(() => {
-    if (examScore > 0) scoreEl.style.color = 'var(--green)';
+    if      (examScore > 0) scoreEl.style.color = 'var(--green)';
     else if (examScore < 0) scoreEl.style.color = 'var(--red)';
-    else scoreEl.style.color = 'var(--accent)';
+    else                    scoreEl.style.color = 'var(--accent)';
   }, 400);
 }
 
@@ -345,16 +374,9 @@ function updateExamScore(correct) {
 // KEYBOARD SHORTCUTS
 // ===========================
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    closeAddModal();
-    closeExamModal();
-  }
-  // Exam shortcuts
+  if (e.key === 'Escape') { closeAddModal(); closeExamModal(); }
   if (examModal.classList.contains('open') && currentExamCard) {
-    if (e.key === ' ' && revealBtn.style.display !== 'none') {
-      e.preventDefault();
-      revealBtn.click();
-    }
+    if (e.key === ' ' && revealBtn.style.display !== 'none') { e.preventDefault(); revealBtn.click(); }
     if (answerReveal.style.display !== 'none') {
       if (e.key === 'ArrowRight' || e.key === 'Enter') correctBtn.click();
       if (e.key === 'ArrowLeft') wrongBtn.click();
@@ -366,11 +388,11 @@ document.addEventListener('keydown', e => {
 // UTILS
 // ===========================
 function escHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ===========================
 // INIT
 // ===========================
 loadCards();
-render();
+subscribeRealtime();

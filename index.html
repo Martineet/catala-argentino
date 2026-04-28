@@ -6,6 +6,7 @@
   <title>Català per a Argentins 🧉</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -20,6 +21,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <span class="sync-status" id="syncStatus">⏳ Connectant...</span>
         <button class="btn btn-outline" id="openAddBtn">+ Afegir paraula</button>
         <button class="btn btn-primary" id="openExamBtn">🎯 Examen</button>
       </div>
@@ -64,28 +66,20 @@
           <input type="text" id="searchInput" placeholder="Cerca paraules..." />
         </div>
       </div>
-
       <div class="table-scroll">
         <table id="wordsTable">
           <thead>
             <tr>
-              <th class="sortable" data-col="catala">
-                Català <span class="sort-icon" id="sort-catala">↕</span>
-              </th>
-              <th class="sortable" data-col="argenti">
-                Argentí <span class="sort-icon" id="sort-argenti">↕</span>
-              </th>
-              <th class="sortable" data-col="dificultat">
-                Dificultat <span class="sort-icon" id="sort-dificultat">↕</span>
-              </th>
-              <th>Accions</th>
+              <th class="sortable" data-col="catala">Català <span class="sort-icon" id="sort-catala">↕</span></th>
+              <th class="sortable" data-col="argenti">Argentí <span class="sort-icon" id="sort-argenti">↕</span></th>
+              <th class="sortable" data-col="dificultat">Dificultat <span class="sort-icon" id="sort-dificultat">↕</span></th>
+              <th></th>
             </tr>
           </thead>
-          <tbody id="wordsBody">
-            <!-- rows injected by JS -->
-          </tbody>
+          <tbody id="wordsBody"></tbody>
         </table>
-        <div id="emptyState" class="empty-state">
+        <div id="loadingState" class="empty-state"><p>⏳ Carregant paraules...</p></div>
+        <div id="emptyState" class="empty-state" style="display:none;">
           <p>✏️ Encara no hi ha paraules!</p>
           <p class="empty-sub">Afegeix la teva primera carta per començar.</p>
         </div>
@@ -99,29 +93,26 @@
       <div class="heart-container">
         <svg class="heart-svg" viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <clipPath id="heartClip">
+            <clipPath id="heartClipL">
+              <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z"/>
+            </clipPath>
+            <clipPath id="heartClipR">
               <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z"/>
             </clipPath>
           </defs>
-          <!-- Heart background -->
           <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z" fill="#ff6eb4" stroke="#ff3d9a" stroke-width="2"/>
-          <!-- Catalan flag (left half) clipped to heart -->
-          <g clip-path="url(#heartClip)">
-            <!-- Catalan senyera - yellow and red stripes -->
+          <g clip-path="url(#heartClipL)">
             <rect x="10" y="5" width="50" height="90" fill="#FCDD09"/>
             <rect x="10" y="5" width="50" height="12" fill="#DA121A"/>
             <rect x="10" y="29" width="50" height="12" fill="#DA121A"/>
             <rect x="10" y="53" width="50" height="12" fill="#DA121A"/>
             <rect x="10" y="77" width="50" height="18" fill="#DA121A"/>
           </g>
-          <!-- Argentine flag (right half) clipped to heart -->
-          <g clip-path="url(#heartClip)">
+          <g clip-path="url(#heartClipR)">
             <rect x="60" y="5" width="50" height="30" fill="#74ACDF"/>
             <rect x="60" y="35" width="50" height="30" fill="white"/>
             <rect x="60" y="65" width="50" height="30" fill="#74ACDF"/>
-            <!-- Sol de Mayo -->
             <circle cx="85" cy="50" r="7" fill="#F6B40E" stroke="#85340A" stroke-width="0.5"/>
-            <!-- Sun rays -->
             <g fill="#F6B40E" stroke="#85340A" stroke-width="0.3">
               <rect x="84" y="37" width="2" height="5" rx="1"/>
               <rect x="84" y="58" width="2" height="5" rx="1"/>
@@ -133,7 +124,6 @@
               <rect x="91" y="57" width="2" height="5" rx="1" transform="rotate(45 92 59)"/>
             </g>
           </g>
-          <!-- Heart outline on top -->
           <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z" fill="none" stroke="#ff3d9a" stroke-width="3"/>
         </svg>
         <div class="heart-glow"></div>
@@ -148,14 +138,13 @@
       <button class="modal-close" id="closeAddBtn">✕</button>
       <h2 class="modal-title">✏️ Nova Carta</h2>
       <p class="modal-desc">Afegeix una nova paraula al teu workbook</p>
-
       <div class="form-group">
         <label>Paraula en Català 🇪🇸</label>
         <input type="text" id="inputCatala" placeholder="ex: gràcies" />
       </div>
       <div class="form-group">
         <label>Paraula en Argentí 🇦🇷</label>
-        <input type="text" id="inputArgenti" placeholder="ex: gracias / gracias che" />
+        <input type="text" id="inputArgenti" placeholder="ex: gracias che" />
       </div>
       <div class="form-group">
         <label>Dificultat</label>
@@ -179,15 +168,12 @@
         <span class="exam-label">Puntuació</span>
         <span class="exam-score" id="examScore">0</span>
       </div>
-
       <div class="exam-card" id="examCard">
         <div class="exam-lang" id="examLang">Català</div>
         <div class="exam-word" id="examWord">—</div>
         <div class="exam-diff" id="examDiff"></div>
       </div>
-
       <button class="btn btn-reveal" id="revealBtn">👁 Revela la resposta</button>
-
       <div class="answer-reveal" id="answerReveal" style="display:none;">
         <div class="reveal-label">La resposta era:</div>
         <div class="reveal-word" id="revealWord">—</div>
@@ -196,7 +182,6 @@
           <button class="btn btn-correct" id="correctBtn">✓ Encertat!</button>
         </div>
       </div>
-
       <div class="exam-empty" id="examEmpty" style="display:none;">
         <p>No hi ha cartes per examinar-se! 📭</p>
         <p>Afegeix paraules primer.</p>
