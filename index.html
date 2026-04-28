@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Català per a Argentins 🧉</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <div class="logo-block">
+        <span class="logo-icon">📓</span>
+        <div>
+          <h1>El Meu Workbook</h1>
+          <p class="subtitle">Català per a Argentins</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-outline" id="openAddBtn">+ Afegir paraula</button>
+        <button class="btn btn-primary" id="openExamBtn">🎯 Examen</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat">
+      <span class="stat-num" id="totalCards">0</span>
+      <span class="stat-label">Cartes totals</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num" id="easyCards">0</span>
+      <span class="stat-label">Fàcils</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num" id="medCards">0</span>
+      <span class="stat-label">Mitjanes</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num" id="hardCards">0</span>
+      <span class="stat-label">Difícils</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num" id="extremCards">0</span>
+      <span class="stat-label">Extremes</span>
+    </div>
+  </div>
+
+  <!-- MAIN TABLE -->
+  <main>
+    <div class="table-wrapper">
+      <div class="table-header-row">
+        <h2 class="section-title">📚 Paraules apreses</h2>
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" id="searchInput" placeholder="Cerca paraules..." />
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table id="wordsTable">
+          <thead>
+            <tr>
+              <th class="sortable" data-col="catala">
+                Català <span class="sort-icon" id="sort-catala">↕</span>
+              </th>
+              <th class="sortable" data-col="argenti">
+                Argentí <span class="sort-icon" id="sort-argenti">↕</span>
+              </th>
+              <th class="sortable" data-col="dificultat">
+                Dificultat <span class="sort-icon" id="sort-dificultat">↕</span>
+              </th>
+              <th>Accions</th>
+            </tr>
+          </thead>
+          <tbody id="wordsBody">
+            <!-- rows injected by JS -->
+          </tbody>
+        </table>
+        <div id="emptyState" class="empty-state">
+          <p>✏️ Encara no hi ha paraules!</p>
+          <p class="empty-sub">Afegeix la teva primera carta per començar.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-heart">
+      <div class="heart-container">
+        <svg class="heart-svg" viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <clipPath id="heartClip">
+              <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z"/>
+            </clipPath>
+          </defs>
+          <!-- Heart background -->
+          <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z" fill="#ff6eb4" stroke="#ff3d9a" stroke-width="2"/>
+          <!-- Catalan flag (left half) clipped to heart -->
+          <g clip-path="url(#heartClip)">
+            <!-- Catalan senyera - yellow and red stripes -->
+            <rect x="10" y="5" width="50" height="90" fill="#FCDD09"/>
+            <rect x="10" y="5" width="50" height="12" fill="#DA121A"/>
+            <rect x="10" y="29" width="50" height="12" fill="#DA121A"/>
+            <rect x="10" y="53" width="50" height="12" fill="#DA121A"/>
+            <rect x="10" y="77" width="50" height="18" fill="#DA121A"/>
+          </g>
+          <!-- Argentine flag (right half) clipped to heart -->
+          <g clip-path="url(#heartClip)">
+            <rect x="60" y="5" width="50" height="30" fill="#74ACDF"/>
+            <rect x="60" y="35" width="50" height="30" fill="white"/>
+            <rect x="60" y="65" width="50" height="30" fill="#74ACDF"/>
+            <!-- Sol de Mayo -->
+            <circle cx="85" cy="50" r="7" fill="#F6B40E" stroke="#85340A" stroke-width="0.5"/>
+            <!-- Sun rays -->
+            <g fill="#F6B40E" stroke="#85340A" stroke-width="0.3">
+              <rect x="84" y="37" width="2" height="5" rx="1"/>
+              <rect x="84" y="58" width="2" height="5" rx="1"/>
+              <rect x="72" y="49" width="5" height="2" rx="1"/>
+              <rect x="93" y="49" width="5" height="2" rx="1"/>
+              <rect x="76" y="40" width="2" height="5" rx="1" transform="rotate(45 77 42)"/>
+              <rect x="91" y="40" width="2" height="5" rx="1" transform="rotate(-45 92 42)"/>
+              <rect x="76" y="57" width="2" height="5" rx="1" transform="rotate(-45 77 59)"/>
+              <rect x="91" y="57" width="2" height="5" rx="1" transform="rotate(45 92 59)"/>
+            </g>
+          </g>
+          <!-- Heart outline on top -->
+          <path d="M60 95 C60 95 10 60 10 30 C10 15 22 5 35 5 C44 5 52 10 60 18 C68 10 76 5 85 5 C98 5 110 15 110 30 C110 60 60 95 60 95Z" fill="none" stroke="#ff3d9a" stroke-width="3"/>
+        </svg>
+        <div class="heart-glow"></div>
+      </div>
+      <p class="footer-text">Fet amb amor · De BCN a BsAs 🧉</p>
+    </div>
+  </footer>
+
+  <!-- ADD WORD MODAL -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal">
+      <button class="modal-close" id="closeAddBtn">✕</button>
+      <h2 class="modal-title">✏️ Nova Carta</h2>
+      <p class="modal-desc">Afegeix una nova paraula al teu workbook</p>
+
+      <div class="form-group">
+        <label>Paraula en Català 🇪🇸</label>
+        <input type="text" id="inputCatala" placeholder="ex: gràcies" />
+      </div>
+      <div class="form-group">
+        <label>Paraula en Argentí 🇦🇷</label>
+        <input type="text" id="inputArgenti" placeholder="ex: gracias / gracias che" />
+      </div>
+      <div class="form-group">
+        <label>Dificultat</label>
+        <div class="difficulty-selector" id="difficultySelector">
+          <button class="diff-btn" data-val="1">1 · Fàcil</button>
+          <button class="diff-btn" data-val="2">2 · Normal</button>
+          <button class="diff-btn" data-val="3">3 · Difícil</button>
+          <button class="diff-btn" data-val="4">4 · Extrem</button>
+        </div>
+      </div>
+      <div class="form-error" id="formError"></div>
+      <button class="btn btn-primary btn-full" id="saveCardBtn">Guardar carta 💾</button>
+    </div>
+  </div>
+
+  <!-- EXAM MODAL -->
+  <div class="modal-overlay" id="examModal">
+    <div class="modal modal-exam">
+      <button class="modal-close" id="closeExamBtn">✕</button>
+      <div class="exam-score-bar">
+        <span class="exam-label">Puntuació</span>
+        <span class="exam-score" id="examScore">0</span>
+      </div>
+
+      <div class="exam-card" id="examCard">
+        <div class="exam-lang" id="examLang">Català</div>
+        <div class="exam-word" id="examWord">—</div>
+        <div class="exam-diff" id="examDiff"></div>
+      </div>
+
+      <button class="btn btn-reveal" id="revealBtn">👁 Revela la resposta</button>
+
+      <div class="answer-reveal" id="answerReveal" style="display:none;">
+        <div class="reveal-label">La resposta era:</div>
+        <div class="reveal-word" id="revealWord">—</div>
+        <div class="verdict-buttons">
+          <button class="btn btn-wrong" id="wrongBtn">✗ He fallat</button>
+          <button class="btn btn-correct" id="correctBtn">✓ Encertat!</button>
+        </div>
+      </div>
+
+      <div class="exam-empty" id="examEmpty" style="display:none;">
+        <p>No hi ha cartes per examinar-se! 📭</p>
+        <p>Afegeix paraules primer.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
