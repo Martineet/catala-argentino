@@ -79,21 +79,13 @@ header {
 
 .logo-icon { font-size: 2.4rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15)); }
 
-h1 {
+.main-title {
   font-family: var(--font-hand);
   font-size: 2rem;
   font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-  letter-spacing: -0.5px;
-}
-
-.subtitle {
-  font-family: var(--font-hand);
-  font-size: 1.1rem;
   color: var(--accent);
-  font-weight: 600;
-  margin-top: 2px;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
 }
 
 .header-actions {
@@ -352,6 +344,25 @@ td { padding: 14px 20px; font-size: 0.95rem; vertical-align: middle; }
 .diff-btn[data-val="4"].selected { background: var(--diff4); border-color: var(--diff4); color: white; }
 
 .form-error { color: var(--red); font-size: 0.85rem; min-height: 18px; margin-bottom: 4px; }
+
+/* Edit pencil button in table */
+.btn-edit {
+  background: none; border: 1.5px solid transparent;
+  color: var(--text-muted); cursor: pointer;
+  padding: 5px 9px; border-radius: 6px; font-size: 1rem;
+  transition: all 0.15s; line-height: 1;
+}
+.btn-edit:hover { border-color: var(--accent2); background: var(--accent2-light); }
+
+/* Delete button inside edit modal */
+.btn-delete-full {
+  width: 100%; margin-top: 10px; padding: 12px;
+  font-family: var(--font-body); font-size: 0.95rem; font-weight: 600;
+  border-radius: 8px; border: 2px solid var(--border-strong);
+  background: transparent; color: var(--red);
+  cursor: pointer; transition: all 0.18s;
+}
+.btn-delete-full:hover { background: #fde8e6; border-color: var(--red); }
 
 /* ===========================
    EXAM MODAL

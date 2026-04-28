@@ -20,7 +20,9 @@ const DIFF_LABELS = {
 let cards      = [];
 let sortCol    = null;
 let sortDir    = 1;
-let selectedDiff = null;
+let selectedDiff    = null;
+let editDiff        = null;
+let editingCardId   = null;
 let examScore  = 0;
 let currentExamCard = null;
 let searchQuery = '';
@@ -86,6 +88,13 @@ function subscribeRealtime() {
       }
     )
     .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'cartes' },
+      (payload) => {
+        const idx = cards.findIndex(c => c.id === payload.new.id);
+        if (idx !== -1) { cards[idx] = payload.new; render(); }
+      }
+    )
+    .on('postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'cartes' },
       (payload) => {
         cards = cards.filter(c => c.id !== payload.old.id);
@@ -116,6 +125,34 @@ async function saveCardToDb(catala, argenti, dificultat) {
 
   setStatus('ok');
   return data;
+}
+
+// ===========================
+// UPDATE CARD IN SUPABASE
+// ===========================
+async function updateCardInDb(id, catala, argenti, dificultat) {
+  setStatus('saving');
+  const { data, error } = await db
+    .from('cartes')
+    .update({ catala, argenti, dificultat })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) { console.error('Error editant carta:', error); setStatus('error'); return null; }
+  setStatus('ok');
+  return data;
+}
+
+// ===========================
+// DELETE CARD FROM SUPABASE
+// ===========================
+async function deleteCardFromDb(id) {
+  setStatus('saving');
+  const { error } = await db.from('cartes').delete().eq('id', id);
+  if (error) { console.error('Error esborrant carta:', error); setStatus('error'); return false; }
+  setStatus('ok');
+  return true;
 }
 
 // ===========================
@@ -167,9 +204,13 @@ function renderTable() {
       <td class="td-catala">${escHtml(card.catala)}</td>
       <td class="td-argenti">${escHtml(card.argenti)}</td>
       <td><span class="diff-badge diff-${card.dificultat}">${diff.dot} ${diff.label}</span></td>
-      <td></td>
+      <td><button class="btn-edit" data-id="${card.id}" title="Editar carta">✏️</button></td>
     `;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => openEditModal(btn.dataset.id));
   });
 }
 
@@ -293,6 +334,91 @@ document.getElementById('inputArgenti').addEventListener('keydown', e => {
 });
 
 // ===========================
+// EDIT CARD MODAL
+// ===========================
+const editModal      = document.getElementById('editModal');
+const editFormError  = document.getElementById('editFormError');
+const updateCardBtn  = document.getElementById('updateCardBtn');
+const deleteCardBtn  = document.getElementById('deleteCardBtn');
+
+document.getElementById('closeEditBtn').addEventListener('click', closeEditModal);
+editModal.addEventListener('click', e => { if (e.target === editModal) closeEditModal(); });
+
+function openEditModal(id) {
+  const card = cards.find(c => c.id === id);
+  if (!card) return;
+  editingCardId = id;
+  editDiff = card.dificultat;
+
+  document.getElementById('editCatala').value  = card.catala;
+  document.getElementById('editArgenti').value = card.argenti;
+  editFormError.textContent = '';
+
+  document.querySelectorAll('.edit-diff-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.val) === editDiff);
+  });
+
+  editModal.classList.add('open');
+  document.getElementById('editCatala').focus();
+}
+
+function closeEditModal() {
+  editModal.classList.remove('open');
+  editingCardId = null;
+}
+
+document.getElementById('editDifficultySelector').addEventListener('click', e => {
+  const btn = e.target.closest('.edit-diff-btn');
+  if (!btn) return;
+  editDiff = parseInt(btn.dataset.val);
+  document.querySelectorAll('.edit-diff-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+});
+
+updateCardBtn.addEventListener('click', async () => {
+  const catala  = document.getElementById('editCatala').value.trim();
+  const argenti = document.getElementById('editArgenti').value.trim();
+
+  if (!catala)   { editFormError.textContent = '⚠️ Escriu la paraula en català.'; return; }
+  if (!argenti)  { editFormError.textContent = '⚠️ Escriu la paraula en argentí.'; return; }
+  if (!editDiff) { editFormError.textContent = '⚠️ Selecciona una dificultat.'; return; }
+
+  editFormError.textContent = '';
+  updateCardBtn.disabled = true;
+  updateCardBtn.textContent = 'Guardant...';
+
+  const updated = await updateCardInDb(editingCardId, catala, argenti, editDiff);
+
+  updateCardBtn.disabled = false;
+  updateCardBtn.textContent = 'Guardar canvis 💾';
+
+  if (!updated) { editFormError.textContent = '❌ Error guardant. Torna-ho a provar.'; return; }
+
+  const idx = cards.findIndex(c => c.id === editingCardId);
+  if (idx !== -1) { cards[idx] = updated; render(); }
+
+  closeEditModal();
+});
+
+deleteCardBtn.addEventListener('click', async () => {
+  if (!confirm('Segur que vols eliminar aquesta carta?')) return;
+
+  deleteCardBtn.disabled = true;
+  deleteCardBtn.textContent = 'Esborrant...';
+
+  const ok = await deleteCardFromDb(editingCardId);
+
+  deleteCardBtn.disabled = false;
+  deleteCardBtn.textContent = '🗑 Eliminar carta';
+
+  if (!ok) { editFormError.textContent = '❌ Error esborrant. Torna-ho a provar.'; return; }
+
+  cards = cards.filter(c => c.id !== editingCardId);
+  render();
+  closeEditModal();
+});
+
+// ===========================
 // EXAM MODAL
 // ===========================
 const examModal   = document.getElementById('examModal');
@@ -374,7 +500,7 @@ function updateExamScore(correct) {
 // KEYBOARD SHORTCUTS
 // ===========================
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeAddModal(); closeExamModal(); }
+  if (e.key === 'Escape') { closeAddModal(); closeEditModal(); closeExamModal(); }
   if (examModal.classList.contains('open') && currentExamCard) {
     if (e.key === ' ' && revealBtn.style.display !== 'none') { e.preventDefault(); revealBtn.click(); }
     if (answerReveal.style.display !== 'none') {

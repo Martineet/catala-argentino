@@ -16,8 +16,7 @@
       <div class="logo-block">
         <span class="logo-icon">📓</span>
         <div>
-          <h1>El Meu Workbook</h1>
-          <p class="subtitle">Català per a Argentins</p>
+          <p class="main-title">Català per a Argentins</p>
         </div>
       </div>
       <div class="header-actions">
@@ -186,6 +185,35 @@
         <p>No hi ha cartes per examinar-se! 📭</p>
         <p>Afegeix paraules primer.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- EDIT CARD MODAL -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <button class="modal-close" id="closeEditBtn">✕</button>
+      <h2 class="modal-title">✏️ Editar Carta</h2>
+      <p class="modal-desc">Modifica o elimina aquesta paraula</p>
+      <div class="form-group">
+        <label>Paraula en Català 🇪🇸</label>
+        <input type="text" id="editCatala" placeholder="ex: gràcies" />
+      </div>
+      <div class="form-group">
+        <label>Paraula en Argentí 🇦🇷</label>
+        <input type="text" id="editArgenti" placeholder="ex: gracias che" />
+      </div>
+      <div class="form-group">
+        <label>Dificultat</label>
+        <div class="difficulty-selector" id="editDifficultySelector">
+          <button class="diff-btn edit-diff-btn" data-val="1">1 · Fàcil</button>
+          <button class="diff-btn edit-diff-btn" data-val="2">2 · Normal</button>
+          <button class="diff-btn edit-diff-btn" data-val="3">3 · Difícil</button>
+          <button class="diff-btn edit-diff-btn" data-val="4">4 · Extrem</button>
+        </div>
+      </div>
+      <div class="form-error" id="editFormError"></div>
+      <button class="btn btn-primary btn-full" id="updateCardBtn">Guardar canvis 💾</button>
+      <button class="btn btn-delete-full" id="deleteCardBtn">🗑 Eliminar carta</button>
     </div>
   </div>
 
