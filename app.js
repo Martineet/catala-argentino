@@ -23,8 +23,6 @@ let sortDir    = 1;
 let selectedDiff    = null;
 let editDiff        = null;
 let editingCardId   = null;
-let examScore  = 0;
-let currentExamCard = null;
 let searchQuery = '';
 
 // ===========================
@@ -421,12 +419,99 @@ deleteCardBtn.addEventListener('click', async () => {
 // ===========================
 // EXAM MODAL
 // ===========================
-const examModal   = document.getElementById('examModal');
-const revealBtn   = document.getElementById('revealBtn');
-const correctBtn  = document.getElementById('correctBtn');
-const wrongBtn    = document.getElementById('wrongBtn');
+
+/*
+  LÒGICA ANTI-REPETICIÓ
+  ─────────────────────
+  Cada "torn" treballa amb N cartes (les que hi ha quan s'obre l'examen).
+  Es generen 2N "slots": N directes (cat→arg o arg→cat aleatori) + N inverses.
+
+  Els slots es barregen però amb una restricció:
+    · Un slot directe de la carta X no pot aparèixer fins que
+      tots els slots directes anteriors han estat vistos  → cua separada.
+    · El slot invers de la carta X no pot aparèixer fins que
+      almenys N/2 slots (directes o inversos) han estat vistos en total.
+
+  Quan s'han vist tots els 2N slots, el torn es reinicia.
+*/
+
+// Estat de l'examen
+let examScore        = 0;
+let currentExamCard  = null;
+let examQueue        = [];   // slots pendents del torn actual
+let examSeen         = 0;    // quants slots s'han vist en aquest torn
+let examTotalSlots   = 0;    // 2N (calculat en iniciar el torn)
+let inverseHoldUntil = {};   // { cardId: mínim examSeen per poder aparèixer }
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildExamQueue() {
+  const n = cards.length;
+  if (n === 0) return;
+
+  // Mínim de cartes vistes per desbloquejar inverses = ceil(N/2)
+  const inverseUnlock = Math.ceil(n / 2);
+
+  // Generar slots directes (direcció aleatòria per carta)
+  const directSlots = cards.map(card => ({
+    card,
+    showCatala: Math.random() < 0.5,
+    isInverse: false,
+  }));
+
+  // Generar slots inversos (direcció oposada)
+  const inverseSlots = cards.map(card => ({
+    card,
+    showCatala: !(directSlots.find(s => s.card.id === card.id).showCatala),
+    isInverse: true,
+  }));
+
+  // Barrejar cada grup per separat
+  shuffle(directSlots);
+  shuffle(inverseSlots);
+
+  // Registrar quan es pot veure cada invers:
+  // El slot invers de la carta X pot aparèixer a partir del moment en què
+  // s'hagi vist el seu directe + almenys inverseUnlock totals vistos.
+  // Com que barregem directes primer, usem la posició dins directSlots
+  // per calcular quan estarà "vist" (posició 0-based + 1 = slots vistos).
+  inverseHoldUntil = {};
+  directSlots.forEach((slot, idx) => {
+    // El directe es veurà quan examSeen arribi a idx+1.
+    // L'invers es pot veure a partir de: max(idx+1, inverseUnlock).
+    inverseHoldUntil[slot.card.id] = Math.max(idx + 1, inverseUnlock);
+  });
+
+  // Muntar la cua: directes primer, inversos al darrere (l'ordre intern
+  // ja és aleatori dins de cada grup).
+  examQueue      = [...directSlots, ...inverseSlots];
+  examSeen       = 0;
+  examTotalSlots = 2 * n;
+}
+
+function nextAvailableSlot() {
+  // Busca el primer slot de la cua que es pugui mostrar ara
+  for (let i = 0; i < examQueue.length; i++) {
+    const slot = examQueue[i];
+    if (!slot.isInverse) return examQueue.splice(i, 1)[0]; // directes sempre disponibles
+    if (examSeen >= inverseHoldUntil[slot.card.id]) return examQueue.splice(i, 1)[0];
+  }
+  // Si tots els inversos estan bloquejats (cas de N=1), agafa el primer
+  return examQueue.shift();
+}
+
+const examModal    = document.getElementById('examModal');
+const revealBtn    = document.getElementById('revealBtn');
+const correctBtn   = document.getElementById('correctBtn');
+const wrongBtn     = document.getElementById('wrongBtn');
 const answerReveal = document.getElementById('answerReveal');
-const examEmpty   = document.getElementById('examEmpty');
+const examEmpty    = document.getElementById('examEmpty');
 
 document.getElementById('openExamBtn').addEventListener('click', openExamModal);
 document.getElementById('closeExamBtn').addEventListener('click', closeExamModal);
@@ -435,6 +520,7 @@ examModal.addEventListener('click', e => { if (e.target === examModal) closeExam
 function openExamModal() {
   examScore = 0;
   updateExamScore();
+  buildExamQueue();
   examModal.classList.add('open');
   loadNextExamCard();
 }
@@ -445,7 +531,7 @@ function closeExamModal() {
 
 function loadNextExamCard() {
   answerReveal.style.display = 'none';
-  revealBtn.style.display = 'block';
+  revealBtn.style.display    = 'block';
 
   if (cards.length === 0) {
     document.getElementById('examCard').style.display = 'none';
@@ -454,28 +540,43 @@ function loadNextExamCard() {
     return;
   }
 
+  // Si la cua s'ha buidat, reiniciem el torn
+  if (examQueue.length === 0) buildExamQueue();
+
   examEmpty.style.display = 'none';
   document.getElementById('examCard').style.display = 'block';
 
-  currentExamCard = cards[Math.floor(Math.random() * cards.length)];
+  const slot = nextAvailableSlot();
+  currentExamCard = slot.card;
 
-  const showCatala = Math.random() < 0.5;
-  document.getElementById('examLang').textContent = showCatala ? 'Català 🇪🇸' : 'Argentí 🇦🇷';
-  document.getElementById('examWord').textContent  = showCatala ? currentExamCard.catala  : currentExamCard.argenti;
-  document.getElementById('revealWord').textContent = showCatala ? currentExamCard.argenti : currentExamCard.catala;
+  const showCatala = slot.showCatala;
+  document.getElementById('examLang').textContent    = showCatala ? 'Català 🇪🇸'  : 'Argentí 🇦🇷';
+  document.getElementById('examWord').textContent    = showCatala ? slot.card.catala  : slot.card.argenti;
+  document.getElementById('revealWord').textContent  = showCatala ? slot.card.argenti : slot.card.catala;
 
-  const diff = DIFF_LABELS[currentExamCard.dificultat];
+  const diff = DIFF_LABELS[slot.card.dificultat];
   document.getElementById('examDiff').innerHTML =
-    `<span class="diff-badge diff-${currentExamCard.dificultat}">${diff.dot} ${diff.label}</span>`;
+    `<span class="diff-badge diff-${slot.card.dificultat}">${diff.dot} ${diff.label}</span>`;
 }
 
 revealBtn.addEventListener('click', () => {
-  revealBtn.style.display = 'none';
+  revealBtn.style.display    = 'none';
   answerReveal.style.display = 'block';
 });
 
-correctBtn.addEventListener('click', () => { examScore += 1; updateExamScore(true);  loadNextExamCard(); });
-wrongBtn.addEventListener('click',   () => { examScore -= 1; updateExamScore(false); loadNextExamCard(); });
+correctBtn.addEventListener('click', () => {
+  examSeen++;
+  examScore++;
+  updateExamScore(true);
+  loadNextExamCard();
+});
+
+wrongBtn.addEventListener('click', () => {
+  examSeen++;
+  examScore--;
+  updateExamScore(false);
+  loadNextExamCard();
+});
 
 function updateExamScore(correct) {
   const scoreEl = document.getElementById('examScore');
